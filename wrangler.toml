@@ -1,0 +1,46 @@
+# wrangler.toml — Cloudflare Workers + Pages Configuration
+# Universal Tool Dashboard
+#
+# Setup steps:
+#   1. Install Wrangler: npm install -g wrangler
+#   2. Login: wrangler login
+#   3. Create KV namespaces (see below)
+#   4. Set secrets: wrangler secret put ADMIN_TOKEN
+#   5. Deploy worker: wrangler deploy
+#   6. Deploy dashboard: wrangler pages deploy . --project-name universal-tool-dashboard
+
+name = "universal-tool-auth"
+main = "cloudflare/auth-worker.js"
+compatibility_date = "2024-09-01"
+
+# ── KV Namespaces ────────────────────────────────────────────────
+# Create namespaces first:
+#   wrangler kv:namespace create "TOOL_AUTH"
+#   wrangler kv:namespace create "TOOL_PROJECTS"
+# Then replace the IDs below.
+[[kv_namespaces]]
+binding    = "TOOL_AUTH"
+id         = "dac2744366e64984b97c21a1b3ecc071"
+preview_id = "dac2744366e64984b97c21a1b3ecc071"
+
+[[kv_namespaces]]
+binding    = "TOOL_PROJECTS"
+id         = "439d9682aa10410aa50a223079572f4f"
+preview_id = "439d9682aa10410aa50a223079572f4f"
+
+# ── Environment Variables ────────────────────────────────────────
+# Set via Cloudflare dashboard or:
+#   wrangler secret put ADMIN_TOKEN
+#   wrangler secret put ALLOWED_EMAILS
+[vars]
+# ALLOWED_EMAILS = '["user@company.com","admin@company.com"]'
+# To allow ANY email (dev only): ALLOWED_EMAILS = '"*"'
+
+# ── Preview environment ──────────────────────────────────────────
+[env.preview]
+name = "universal-tool-auth-preview"
+
+# ── Pages deployment ─────────────────────────────────────────────
+# Deploy static dashboard separately:
+#   wrangler pages deploy . --project-name universal-tool-dashboard
+# Or set up CI via Cloudflare Pages GitHub integration.

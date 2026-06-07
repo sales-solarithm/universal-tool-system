@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<!-- FILE: index.html (PRODUCTION) -->
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>⚡ ToolForge Dashboard</title>
+<link rel="stylesheet" href="assets/styles.css">
+
+<!-- ═══════════════════════════════════════════════════════════════
+     PRODUCTION CONFIG — DO NOT EDIT
+     Auth Worker URL is hardcoded. Users cannot change settings.
+══════════════════════════════════════════════════════════════════ -->
+<script>
+const PRODUCTION_CONFIG = {
+  workerUrl:    'https://universal-tool-auth.sales-solarithm.workers.dev',
+  useKV:        true,
+  lockSettings: true
+};
+// Apply immediately so auth.js picks it up
+try {
+  localStorage.setItem('toolforge::workerUrl', PRODUCTION_CONFIG.workerUrl);
+  localStorage.setItem('toolforge::useKV', JSON.stringify(PRODUCTION_CONFIG.useKV));
+} catch(e) {}
+</script>
+
+<!-- Load auth.js AFTER config is set -->
+<script src="core/auth.js"></script>
+
+<style>
+  /* ── Inline layout glue ──────────────────────────────────────── */
+  #tool-frame-container {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+    position: relative;
+  }
+  #tool-frame {
+    flex: 1;
+    border: none;
+    background: #fff;
+    display: block;
+    min-width: 0;
+  }
+  #proj-drawer { top: 0; }
+
+  /* Viewer toolbar */
+  #viewer-toolbar .tb-spacer { flex: 1; }
+  #tb-save-btn { border-color: rgba(212,175,55,0.35); color: var(--gold); }
+  #tb-save-btn:hover { background: rgba(212,175,55,0.1); border-color: var(--gold); }
+
+  /* Auth modal */
+  .auth-logo    { font-size: 36px; margin-bottom: 4px; }
+  .auth-tagline { font-size: 13px; color: var(--text-muted); margin-bottom: 1.5rem; }
+
+  /* Readonly field hint */
+  .field-locked {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+  .field-locked-note {
+    font-size: 11px;
+    color: var(--success);
+    margin-top: 5px;
+  }
+
+  /* Project name / switch inputs in viewer toolbar */
+  #viewer-proj-name {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 12px;
+    padding: 3px 8px;
+    width: 130px;
+    outline: none;
+    font-family: var(--font);
+  }
+  #viewer-proj-name:focus { border-color: var(--gold); background: var(--card); }
+  #viewer-proj-select {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-muted);
+    font-size: 12px;
+    padding: 3px 8px;
+    outline: none;
+    cursor: pointer;
+    max-width: 110px;
+  }
+  #viewer-proj-select:focus { border-color: var(--gold); }
+
+  /* Ping status */
+  #ping-status { font-size: 12px; margin-top: 6px; min-height: 16px; }
+
+  /* Session info in settings */
+  #settings-session-info { font-size: 12px; color: var(--text-muted); }
+
+  /* Drawer tool name subtitle */
+  #drawer-tool-name { font-size: 12px; color: var(--text-muted); font-weight: 400; }
+
+  /* Hidden import input */
+  #import-file-input { display: none; }
+</style>
+</head>
+
+<body>
+<div id="app">
+
+  <!-- ══════════════════════════════════════════════════════════════
+       HEADER
+  ══════════════════════════════════════════════════════════════ -->
+  <header id="main-header">
+    <a class="logo" onclick="navigateBack()" title="Back to dashboard" style="cursor:pointer;text-decoration:none;">
+      ⚡ <span>ToolForge</span>
+      <span class="logo-sub">Dashboard</span>
+    </a>
+
+    <nav aria-label="Header navigation">
+      <!-- User chip (visible when logged in) -->
+      <div id="header-user-section" style="display:none;">
+        <span>👤</span>
+        <span id="header-user"></span>
+      </div>
+
+      <button onclick="showSettingsModal()" title="Settings" aria-label="Open settings">⚙️ Settings</button>
+      <button id="header-login-btn"  onclick="showLoginModal()" class="btn btn-primary btn-sm" style="display:none;">Log In</button>
+      <button id="header-logout-btn" onclick="logout()" style="display:none;" title="Log out">Logout</button>
+    </nav>
+  </header>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       MAIN CONTENT
+  ══════════════════════════════════════════════════════════════ -->
+  <div id="main-content">
+
+    <!-- ── View 1: Tool Grid ─────────────────────────────────── -->
+    <div id="tool-grid-view">
+      <h1 class="page-title">Your Tools</h1>
+      <p class="page-subtitle">Click any tool to open it. Your work is saved automatically.</p>
+      <div class="tool-grid" id="tool-grid" role="list" aria-label="Registered tools"></div>
+    </div>
+
+    <!-- ── View 2: Tool Viewer ───────────────────────────────── -->
+    <div id="tool-viewer">
+
+      <!-- Viewer toolbar -->
+      <div id="viewer-toolbar" role="toolbar" aria-label="Tool controls">
+        <button onclick="navigateBack()" title="Back to dashboard (Ctrl+B)">← Dashboard</button>
+        <div class="toolbar-sep"></div>
+        <span id="viewer-tool-name" aria-live="polite"></span>
+        <div class="tb-spacer"></div>
+
+        <button id="tb-save-btn" onclick="saveCurrent()" title="Save project (Ctrl+S)">💾 Save</button>
+        <button onclick="exportCurrent()" title="Export as JSON">📤 Export</button>
+        <button onclick="triggerImport()" title="Import JSON">📥 Import</button>
+        <div class="toolbar-sep"></div>
+
+        <input type="text"   id="viewer-proj-name"   placeholder="Project name" value="Default" title="Current project name">
+        <select              id="viewer-proj-select"  onchange="switchViewerProject(this.value)" title="Switch project">
+          <option value="">Switch…</option>
+        </select>
+        <button onclick="toggleDrawer()" title="Saved projects panel">📁 Projects</button>
+      </div>
+
+      <!-- Frame + drawer -->
+      <div id="tool-frame-container">
+        <iframe
+          id="tool-frame"
+          sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-downloads"
+          title="Tool content"
+        ></iframe>
+
+        <!-- Projects drawer -->
+        <div id="proj-drawer" aria-label="Saved projects" role="complementary">
+          <div class="drawer-header">
+            <div>
+              <h3>Saved Projects</h3>
+              <span id="drawer-tool-name"></span>
+            </div>
+            <button class="drawer-close" onclick="toggleDrawer()" aria-label="Close">✕</button>
+          </div>
+          <div id="proj-list" role="list">
+            <p class="proj-empty">No saved projects yet.<br>Click 💾 Save to create one.</p>
+          </div>
+          <div class="drawer-footer">
+            <button class="btn btn-secondary btn-full btn-sm" onclick="newViewerProject()">+ New Project</button>
+          </div>
+        </div>
+      </div><!-- /#tool-frame-container -->
+
+    </div><!-- /#tool-viewer -->
+  </div><!-- /#main-content -->
+
+  <!-- ══════════════════════════════════════════════════════════════
+       STATUS BAR
+  ══════════════════════════════════════════════════════════════ -->
+  <div id="status-bar" role="status" aria-live="polite">
+    <span class="status-dot" id="status-dot"></span>
+    <span id="status-msg">Ready</span>
+    <span id="status-time" style="margin-left:auto;"></span>
+  </div>
+
+</div><!-- /#app -->
+
+<!-- ══════════════════════════════════════════════════════════════
+     AUTH MODAL
+══════════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="auth-modal" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+  <div class="modal">
+    <div class="auth-logo">⚡</div>
+    <h2 id="auth-title" style="color:var(--gold);margin-bottom:4px;">ToolForge</h2>
+    <p class="auth-tagline">Enter your authorised email to access the dashboard</p>
+
+    <div class="field" style="text-align:left;">
+      <label class="field-label" for="auth-email-input">Email Address</label>
+      <input
+        type="email"
+        id="auth-email-input"
+        placeholder="you@company.com"
+        autocomplete="off"
+        autocorrect="off"
+        autocapitalize="off"
+        spellcheck="false"
+        onkeydown="if(event.key==='Enter')handleLogin()"
+      >
+      <div class="modal-error" id="auth-error" role="alert"></div>
+    </div>
+
+    <button class="btn btn-primary btn-full" id="auth-submit-btn" onclick="handleLogin()" style="margin-top:4px;">
+      Verify Access
+    </button>
+
+    <p style="font-size:11px;margin-top:1rem;color:var(--text-dim);">
+      Access is managed by your administrator.
+    </p>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     SETTINGS MODAL (PRODUCTION — restricted fields)
+══════════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="settings-modal" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+  <div class="modal modal-settings" style="max-width:460px;text-align:left;">
+
+    <div class="modal-header">
+      <h2 id="settings-title">⚙️ Settings</h2>
+      <button class="drawer-close" onclick="hideSettingsModal()" aria-label="Close settings">✕</button>
+    </div>
+
+    <!-- ── Cloudflare Worker (READ-ONLY for users) ── -->
+    <div class="settings-section">
+      <h3>Cloudflare Worker</h3>
+      <div class="field">
+        <label class="field-label">Worker URL</label>
+        <div class="settings-row">
+          <input
+            type="url"
+            id="settings-worker-url"
+            value="https://email-auth-tool.sales-solarithm.workers.dev"
+            readonly
+            class="field-locked"
+            tabindex="-1"
+          >
+          <!-- Ping still works (it reads the hardcoded URL) -->
+          <button class="btn btn-secondary btn-sm" id="settings-ping-btn" onclick="pingWorkerFromSettings()">Ping</button>
+        </div>
+        <div id="ping-status"></div>
+        <p class="field-locked-note">✓ Configured by administrator — contact admin to change.</p>
+      </div>
+
+      <!-- KV toggle: disabled, always on -->
+      <label class="check-field" style="margin-top:8px;opacity:0.6;pointer-events:none;">
+        <input type="checkbox" id="settings-use-kv" checked disabled>
+        <div>
+          <span style="font-size:13px;font-weight:500;color:var(--text);">Use Cloudflare KV Storage</span>
+          <span style="display:block;font-size:11px;color:var(--text-muted);">Enabled — managed by administrator</span>
+        </div>
+      </label>
+    </div>
+
+    <!-- ── Authorised Emails (admin only) ── -->
+    <div class="settings-section">
+      <h3>Authorised Emails</h3>
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">
+        Email access is managed via Employee Access Manager.<br>
+        Contact your administrator to add or remove access.
+      </p>
+      <a
+        href="https://email-auth-tool.sales-solarithm.workers.dev/admin"
+        target="_blank"
+        rel="noopener"
+        class="btn btn-secondary btn-sm"
+      >Open Employee Manager (Admin Only) →</a>
+    </div>
+
+    <!-- ── Appearance ── -->
+    <div class="settings-section">
+      <h3>Appearance</h3>
+      <div class="field">
+        <label class="field-label" for="settings-theme">Theme</label>
+        <select id="settings-theme">
+          <option value="dark">Dark (default)</option>
+          <option value="light">Light</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- ── Session info ── -->
+    <div class="settings-section" id="settings-session-section">
+      <h3>Session</h3>
+      <p id="settings-session-info"></p>
+    </div>
+
+    <!-- ── Actions ── -->
+    <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
+      <button class="btn btn-danger btn-sm" id="settings-logout-btn" onclick="logout()">Log Out</button>
+      <button class="btn btn-secondary btn-sm" onclick="hideSettingsModal()">Cancel</button>
+      <button class="btn btn-primary btn-sm" onclick="saveSettings()">Save Settings</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     TOASTS + HIDDEN INPUTS
+══════════════════════════════════════════════════════════════ -->
+<div id="toast-container" aria-live="assertive" aria-atomic="false"></div>
+<input type="file" id="import-file-input" accept=".json" onchange="handleImport(event)">
+
+<!-- ══════════════════════════════════════════════════════════════
+     SCRIPTS — load order: auth.js already loaded in <head>
+══════════════════════════════════════════════════════════════ -->
+<script src="core/storage.js"></script>
+<script src="core/dashboard.js"></script>
+
+<!-- ── Dashboard UI bridge (onclick handlers → core functions) ── -->
+<script>
+
+// ── VIEWER: Save ─────────────────────────────────────────────────
+function saveCurrent() {
+  const frame   = document.getElementById('tool-frame');
+  const projEl  = document.getElementById('viewer-proj-name');
+  if (!frame || !_activeToolId) return;
+
+  const projName = (projEl ? projEl.value.trim() : '') || 'Default';
+
+  // Ask wrapped tool to save via postMessage (Phase 1 bridge)
+  try { frame.contentWindow.postMessage({ type: 'project:save' }, '*'); } catch(e) {}
+
+  // Also do a dashboard-level save by reading toolAPI state
+  setTimeout(async function() {
+    let state = null;
+    try {
+      const fw  = frame.contentWindow;
+      const api = fw && fw.toolAPI;
+      if (api && typeof api.getState === 'function') {
+        if (typeof api.beforeSave === 'function' && api.beforeSave() === false) {
+          showToast('Save cancelled by tool.', 'error'); return;
+        }
+        state = api.getState();
+      }
+    } catch(e) {}
+
+    const result = await storage.saveProject(_activeToolId, projName, state);
+    if (result && result.success) {
+      showToast('Saved: ' + projName, 'success');
+      setStatus('Saved "' + projName + '"', new Date());
+      refreshViewerProjectSelect();
+      if (document.getElementById('proj-drawer').classList.contains('open')) {
+        showSavedProjects(_activeToolId);
+      }
+    } else {
+      showToast((result && result.error) ? result.error : 'Save failed.', 'error');
+    }
+  }, 80);
+}
+
+// ── VIEWER: Export ────────────────────────────────────────────────
+function exportCurrent() {
+  const frame = document.getElementById('tool-frame');
+  if (!frame || !_activeToolId) return;
+
+  let state = null;
+  try {
+    const api = frame.contentWindow && frame.contentWindow.toolAPI;
+    if (api && typeof api.getState === 'function') state = api.getState();
+  } catch(e) {}
+
+  const projName = document.getElementById('viewer-proj-name').value.trim() || 'Default';
+  const bundle = {
+    _toolforge:  true,
+    toolId:      _activeToolId,
+    projectName: projName,
+    exportedAt:  new Date().toISOString(),
+    state
+  };
+
+  const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
+  const a    = document.createElement('a');
+  a.href     = URL.createObjectURL(blob);
+  a.download = _activeToolId + '-' + projName.replace(/[^a-z0-9]/gi, '-') + '.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  showToast('Exported: ' + a.download, 'success');
+}
+
+// ── VIEWER: Trigger Import ────────────────────────────────────────
+function triggerImport() {
+  document.getElementById('import-file-input').click();
+}
+
+// ── VIEWER: Handle Imported File ─────────────────────────────────
+function handleImport(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async function(e) {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (!data._toolforge) { showToast('Not a ToolForge export file.', 'error'); return; }
+
+      const frame = document.getElementById('tool-frame');
+      if (frame && frame.contentWindow) {
+        try {
+          const api = frame.contentWindow.toolAPI;
+          if (api && typeof api.loadState === 'function') {
+            api.loadState(data.state);
+            if (typeof api.afterLoad === 'function') api.afterLoad();
+          }
+        } catch(err) {
+          frame.contentWindow.postMessage({
+            type:      'project:load',
+            projectId: data.projectName || 'imported',
+            data:      data.state
+          }, '*');
+        }
+      }
+      if (data.projectName) document.getElementById('viewer-proj-name').value = data.projectName;
+      showToast('Imported: ' + file.name, 'success');
+    } catch(err) {
+      showToast('Import failed: ' + err.message, 'error');
+    }
+    event.target.value = '';
+  };
+  reader.readAsText(file);
+}
+
+// ── VIEWER: Switch project via dropdown ──────────────────────────
+function switchViewerProject(projectId) {
+  if (!projectId || !_activeToolId) return;
+  loadProjectIntoTool(_activeToolId, projectId);
+  document.getElementById('viewer-proj-select').value = '';
+}
+
+// ── VIEWER: Refresh dropdown options ─────────────────────────────
+async function refreshViewerProjectSelect() {
+  if (!_activeToolId) return;
+  const select   = document.getElementById('viewer-proj-select');
+  const projects = await storage.listProjects(_activeToolId);
+  select.innerHTML = '<option value="">Switch…</option>'
+    + projects.map(function(p) {
+        const safe = String(p.id).replace(/"/g, '&quot;');
+        return '<option value="' + safe + '">' + safe + '</option>';
+      }).join('');
+}
+
+// ── VIEWER: Toggle drawer ─────────────────────────────────────────
+function toggleDrawer() {
+  const drawer = document.getElementById('proj-drawer');
+  const isOpen = drawer.classList.toggle('open');
+  if (isOpen && _activeToolId) {
+    const tool   = (_toolRegistry || []).find(function(t) { return t.id === _activeToolId; });
+    const nameEl = document.getElementById('drawer-tool-name');
+    if (nameEl && tool) nameEl.textContent = tool.icon + ' ' + tool.name;
+    showSavedProjects(_activeToolId);
+  }
+}
+
+// ── VIEWER: New project slot ──────────────────────────────────────
+function newViewerProject() {
+  const all  = storage._readLocalIndex(_activeToolId || '');
+  const name = prompt('New project name:', 'Project ' + (all.length + 1));
+  if (!name) return;
+  document.getElementById('viewer-proj-name').value = name.trim();
+  showToast('Project "' + name.trim() + '" ready. Click Save to store state.', 'success');
+}
+
+// ── SETTINGS: Ping worker ─────────────────────────────────────────
+async function pingWorkerFromSettings() {
+  const btn      = document.getElementById('settings-ping-btn');
+  const statusEl = document.getElementById('ping-status');
+  btn.disabled   = true;
+  statusEl.textContent = 'Pinging…';
+  statusEl.style.color = 'var(--text-muted)';
+
+  const res = await pingWorker();
+
+  if (res.ok) {
+    statusEl.textContent = '✓ Worker is online';
+    statusEl.style.color = 'var(--success)';
+  } else {
+    statusEl.textContent = '✕ ' + res.error;
+    statusEl.style.color = 'var(--danger)';
+  }
+  btn.disabled = false;
+}
+
+// ── STATUS BAR ───────────────────────────────────────────────────
+function setStatus(msg, date) {
+  const el = document.getElementById('status-msg');
+  if (el) el.textContent = msg || 'Ready';
+  if (date) {
+    const timeEl = document.getElementById('status-time');
+    if (timeEl) timeEl.textContent = 'Saved ' + date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  }
+}
+
+// ── MISC aliases ─────────────────────────────────────────────────
+function updateUserChip() { renderHeader(); }
+function showAuthModal()   { showLoginModal(); }
+function hideAuthModal()   { hideLoginModal(); }
+function submitAuth()      { handleLogin(); }
+
+// Delete project (called from drawer)
+function deleteProject(toolId, projectId) {
+  deleteProjectFromPanel(toolId, projectId);
+  refreshViewerProjectSelect();
+}
+
+// ── KEYBOARD: Ctrl+S saves in viewer ─────────────────────────────
+document.addEventListener('keydown', function(e) {
+  if ((e.ctrlKey || e.metaKey) && e.key === 's' && _activeToolId) {
+    e.preventDefault();
+    saveCurrent();
+  }
+});
+
+</script>
+
+<script>
+registerTool({
+  id: 'pipe-calculator-pro',
+  name: 'PIPE CALCULATOR PRO',
+  icon: '🔢',
+  src: 'tools/tool-pipe-calculator-pro.html',
+  requiresAuth: true,
+  version: '1.0.0'
+});
+
+// Add more tools below...
+registerTool({
+  id: 'another-tool',
+  name: 'Another Tool',
+  icon: '🔧',
+  src: 'tools/tool-another-tool.html',
+  requiresAuth: true
+});
+</script>
+
+</body>
+</html>
