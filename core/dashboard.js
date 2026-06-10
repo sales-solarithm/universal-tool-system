@@ -241,13 +241,14 @@ function renderToolGrid() {
          + '</div>';
   }).join('');
 
-  const addCard = '<a href="tool-injector.html" class="card tool-card add-new">'
-    + '<div style="font-size:28px;margin-bottom:8px;">＋</div>'
-    + '<div style="font-size:14px;font-weight:600;">Add New Tool</div>'
-    + '<div style="font-size:12px;margin-top:4px;opacity:0.7;">Open Tool Injector</div>'
-    + '</a>';
+// REMOVED: Add New Tool card - Admin only mode
+// const addCard = '<a href="tool-injector.html" class="card tool-card add-new">'
+//   + '<div style="font-size:28px;margin-bottom:8px;">＋</div>'
+//   + '<div style="font-size:14px;font-weight:600;">Add New Tool</div>'
+//   + '<div style="font-size:12px;margin-top:4px;opacity:0.7;">Open Tool Injector</div>'
+//   + '</a>';
 
-  grid.innerHTML = cards + addCard;
+grid.innerHTML = cards;  // Only show registered tools
 }
 
 // ── Header ────────────────────────────────────────────────────────
