@@ -558,5 +558,18 @@ registerTool({
 });
 </script>
 
+<script>
+// Hide "Add New Tool" card on page load
+document.addEventListener('DOMContentLoaded', function() {
+  var cards = document.querySelectorAll('.tool-card');
+  cards.forEach(function(card) {
+    var nameEl = card.querySelector('.tool-name');
+    if (nameEl && nameEl.textContent.includes('Add New Tool')) {
+      card.style.display = 'none';
+    }
+  });
+});
+</script>
+
 </body>
 </html>
