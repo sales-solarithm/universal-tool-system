@@ -556,19 +556,46 @@ registerTool({
   requiresAuth: true,
   version: '1.0.0'
 });
+
+registerTool({
+  id: 'pdf-generetor-pro',
+  name: 'PDF Generetor Pro',
+  icon: '🗃️',
+  src: 'tools/tool-pdf-generetor-pro.html',
+  requiresAuth: true,
+  version: '1.0.0'
+});
 </script>
 
 <script>
-// Hide "Add New Tool" card on page load
-document.addEventListener('DOMContentLoaded', function() {
-  var cards = document.querySelectorAll('.tool-card');
-  cards.forEach(function(card) {
-    var nameEl = card.querySelector('.tool-name');
-    if (nameEl && nameEl.textContent.includes('Add New Tool')) {
-      card.style.display = 'none';
-    }
-  });
-});
+// Hide "Add New Tool" card - works even if card is added dynamically
+(function() {
+  function hideAddToolCard() {
+    var cards = document.querySelectorAll('.tool-card');
+    cards.forEach(function(card) {
+      var nameEl = card.querySelector('.tool-name');
+      if (nameEl && nameEl.textContent.trim() === 'Add New Tool') {
+        card.style.display = 'none';
+        return true; // found and hidden
+      }
+    });
+    return false; // not found yet
+  }
+
+  // Try immediately
+  if (!hideAddToolCard()) {
+    // If not found, watch for new elements being added
+    var observer = new MutationObserver(function() {
+      if (hideAddToolCard()) {
+        observer.disconnect(); // stop watching once hidden
+      }
+    });
+    observer.observe(document.getElementById('tool-grid') || document.body, {
+      childList: true,
+      subtree: true
+    });
+  }
+})();
 </script>
 
 </body>
