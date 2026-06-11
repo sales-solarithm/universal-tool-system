@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>🔐 Employee Access Manager - Secure</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; background: #f5f5f5; }
+    .card { background: white; padding: 24px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    h2 { margin: 0 0 16px; color: #333; }
+    input, button { padding: 10px; margin: 4px 0; width: 100%; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
+    button { background: #007bff; color: white; border: none; cursor: pointer; font-weight: bold; }
+    button:hover { background: #0056b3; }
+    button:disabled { background: #ccc; cursor: not-allowed; }
+    button.remove { background: #dc3545; width: auto; padding: 6px 12px; font-size: 12px; }
+    button.verify { background: #28a745; margin-top: 10px; }
+    button.verify:hover { background: #1e7e34; }
+    #emailList { list-style: none; padding: 0; margin-top: 16px; max-height: 250px; overflow-y: auto; }
+    #emailList li { display: flex; justify-content: space-between; align-items: center; padding: 8px; border-bottom: 1px solid #eee; }
+    .cfg { background: #e9ecef; padding: 12px; border-radius: 4px; margin-bottom: 16px; }
+    .status { margin-top: 8px; padding: 10px; border-radius: 4px; font-size: 13px; display: none; }
+    .ok { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+    .err { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+    .warn { background: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
+    .locked { opacity: 0.5; pointer-events: none; }
+    .badge { display: inline-block; padding: 4px 8px; background: #28a745; color: white; border-radius: 4px; font-size: 12px; margin-left: 8px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>🔐 Employee Access Manager <span id="authBadge" class="badge" style="display:none;">✅ AUTHENTICATED</span></h2>
+    
+    <div class="cfg">
+      <label><strong>Worker URL:</strong></label>
+      <input type="text" id="wUrl" placeholder="https://email-auth-tool.sales-solarithm.workers.dev">
+      
+      <label><strong>Admin Password:</strong> <em style="color:#666; font-size:12px;">(Required every session)</em></label>
+      <input type="password" id="token" placeholder="Enter your admin password">
+      
+      <button onclick="verifyCredentials()" class="verify">🔑 Verify Password</button>
+      <div id="verifyStatus" class="status"></div>
+    </div>
+    
+    <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;">
+    
+    <div id="adminPanel" class="locked">
+      <input type="email" id="newEmail" placeholder="employee@company.com">
+      <button onclick="addEmployee()" id="addBtn" disabled>➕ Add Employee</button>
+      <div id="addStatus" class="status"></div>
+      
+      <h3>Allowed Emails (<span id="cnt">0</span>)</h3>
+      <ul id="emailList"><li style="text-align:center; color:#999; padding:20px;">🔒 Verify password to view emails</li></ul>
+    </div>
+  </div>
+
+  <script>
+    // Load ONLY the URL (password is NEVER saved)
+    window.onload = function() {
+      const savedUrl = localStorage.getItem('wUrl');
+      if (savedUrl) {
+        document.getElementById('wUrl').value = savedUrl;
+      }
+    };
+
+    function showStatus(elementId, msg, type) {
+      const el = document.getElementById(elementId);
+      el.textContent = msg;
+      el.className = 'status ' + type;
+      el.style.display = 'block';
+    }
+
+    async function verifyCredentials() {
+      const url = document.getElementById('wUrl').value.trim();
+      const token = document.getElementById('token').value.trim();
+      
+      // Clean URL
+      const cleanUrl = url.endsWith('/') ? url.slice(0, -1) : url;
+      
+      if (!cleanUrl) {
+        showStatus('verifyStatus', '❌ Please enter Worker URL', 'err');
+        return;
+      }
+      if (!token) {
+        showStatus('verifyStatus', '❌ Please enter Admin Password', 'err');
+        return;
+      }
+      
+      // Save ONLY the URL (password stays in memory)
+      localStorage.setItem('wUrl', cleanUrl);
+      
+      // Test the credentials by trying to fetch the email list
+      try {
+        const response = await fetch(`${cleanUrl}/admin`, {
+          method: 'GET',
+          headers: { 'X-Admin-Token': token }
+        });
+        
+        if (response.ok) {
+          // Credentials are valid!
+          showStatus('verifyStatus', '✅ Password verified! You can now manage employees.', 'ok');
+          document.getElementById('authBadge').style.display = 'inline-block';
+          document.getElementById('adminPanel').classList.remove('locked');
+          document.getElementById('addBtn').disabled = false;
+          
+          // Store token in memory only (not localStorage)
+          window.adminToken = token;
+          window.workerUrl = cleanUrl;
+          
+          loadEmailList();
+        } else if (response.status === 401) {
+          showStatus('verifyStatus', '❌ Incorrect password. Please try again.', 'err');
+        } else {
+          showStatus('verifyStatus', '❌ Connection failed. Check URL and password.', 'err');
+        }
+      } catch (err) {
+        showStatus('verifyStatus', '❌ Cannot connect to server: ' + err.message, 'err');
+      }
+    }
+
+    async function apiCall(path, method, body = null) {
+      if (!window.workerUrl || !window.adminToken) {
+        return { error: 'Please verify your password first' };
+      }
+      
+      try {
+        const response = await fetch(`${window.workerUrl}${path}`, {
+          method: method,
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Admin-Token': window.adminToken
+          },
+          body: body ? JSON.stringify(body) : null
+        });
+        
+        if (response.ok) {
+          return await response.json();
+        } else if (response.status === 401) {
+          // Session expired or password changed
+          alert('⚠️ Your session has expired. Please re-enter your password.');
+          location.reload();
+          return { error: 'Unauthorized' };
+        } else {
+          return { error: `Server error: ${response.status}` };
+        }
+      } catch (err) {
+        return { error: `Connection failed: ${err.message}` };
+      }
+    }
+
+    async function loadEmailList() {
+      const result = await apiCall('/admin', 'GET');
+      
+      if (result.error) {
+        document.getElementById('emailList').innerHTML = `<li style="color:#c62828; padding:10px;">❌ ${result.error}</li>`;
+        document.getElementById('cnt').textContent = '0';
+        return;
+      }
+      
+      if (Array.isArray(result)) {
+        document.getElementById('cnt').textContent = result.length;
+        const list = document.getElementById('emailList');
+        
+        if (result.length === 0) {
+          list.innerHTML = '<li style="text-align:center; color:#999; padding:20px;">No emails added yet. Add your first employee above!</li>';
+        } else {
+          list.innerHTML = '';
+          result.forEach(email => {
+            const li = document.createElement('li');
+            li.innerHTML = `
+              <span style="font-weight:500;">${email}</span>
+              <button class="remove" onclick="removeEmail('${email}')">Remove</button>
+            `;
+            list.appendChild(li);
+          });
+        }
+      }
+    }
+
+    async function addEmployee() {
+      const email = document.getElementById('newEmail').value.trim();
+      
+      if (!email || !email.includes('@')) {
+        showStatus('addStatus', '❌ Please enter a valid email address', 'err');
+        return;
+      }
+      
+      showStatus('addStatus', '⏳ Adding employee...', 'warn');
+      const result = await apiCall('/admin', 'POST', { action: 'add', email: email.toLowerCase() });
+      
+      if (result.error) {
+        showStatus('addStatus', `❌ ${result.error}`, 'err');
+      } else if (result.success) {
+        showStatus('addStatus', `✅ Successfully added ${email}`, 'ok');
+        document.getElementById('newEmail').value = '';
+        loadEmailList();
+      } else {
+        showStatus('addStatus', '❌ Failed to add employee', 'err');
+      }
+    }
+
+    async function removeEmail(email) {
+      if (!confirm(`Are you sure you want to remove ${email}?`)) {
+        return;
+      }
+      
+      const result = await apiCall('/admin', 'POST', { action: 'remove', email: email });
+      
+      if (result.success) {
+        loadEmailList();
+      } else {
+        alert('Failed to remove email: ' + (result.error || 'Unknown error'));
+      }
+    }
+  </script>
+</body>
+</html>
