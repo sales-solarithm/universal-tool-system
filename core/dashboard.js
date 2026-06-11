@@ -83,8 +83,23 @@ async function openTool(toolId) {
   frame.src    = 'about:blank';
   frame.srcdoc = '';
 
-  try {
-    const r = await fetch(tool.src, { cache: 'no-cache' });
+    try {
+    // Get auth token from session
+    const token = typeof getSessionToken === 'function' ? getSessionToken() : null;
+    
+    // Fetch tool from Worker with auth header
+    const workerUrl = typeof PRODUCTION_CONFIG !== 'undefined' 
+      ? PRODUCTION_CONFIG.workerUrl 
+      : 'https://universal-tool-auth.sales-solarithm.workers.dev';
+      
+    const r = await fetch(workerUrl + tool.src, {
+      cache: 'no-cache',
+      headers: {
+        'Authorization': token ? 'Bearer ' + token : '',
+        'X-Session-Token': token || ''
+      }
+    });
+    
     if (!r.ok) throw new Error('HTTP ' + r.status + ' — ' + tool.src);
     const html = await r.text();
     frame.srcdoc = html;

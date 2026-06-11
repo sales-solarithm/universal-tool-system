@@ -28,6 +28,10 @@ binding    = "TOOL_PROJECTS"
 id         = "439d9682aa10410aa50a223079572f4f"
 preview_id = "439d9682aa10410aa50a223079572f4f"
 
+[[kv_namespaces]]
+binding = "TOOLS_KV"
+id = "44917482c4514da0bfc851c92f935b15"
+
 # ── Environment Variables ────────────────────────────────────────
 # Set via Cloudflare dashboard or:
 #   wrangler secret put ADMIN_TOKEN
