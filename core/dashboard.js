@@ -92,7 +92,9 @@ async function openTool(toolId) {
       ? PRODUCTION_CONFIG.workerUrl 
       : 'https://universal-tool-auth.sales-solarithm.workers.dev';
       
-    const r = await fetch(workerUrl + tool.src, {
+    // Ensure workerUrl ends with /
+    const baseUrl = workerUrl.endsWith('/') ? workerUrl : workerUrl + '/';
+    const r = await fetch(baseUrl + tool.src, {
       cache: 'no-cache',
       headers: {
         'Authorization': token ? 'Bearer ' + token : '',

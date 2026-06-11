@@ -82,7 +82,48 @@ export default {
       return new Response(null, { status: 204, headers: CORS });
     }
 
-    try {
+      try {
+    // ── PROTECTED TOOL ROUTE ───────────────────────────────────
+    const toolMatch = url.pathname.match(/^\/tools\/(.+\.html)$/);
+    if (toolMatch) {
+      try {
+        const toolKey = toolMatch[1];
+        
+        // Safety check
+        if (!env.TOOLS_KV) return new Response('Tools storage not configured', { status: 500 });
+        
+        // Get file from secure storage
+        const toolContent = await env.TOOLS_KV.get(toolKey);
+        if (!toolContent) return new Response('Tool not found: ' + toolKey, { status: 404 });
+        
+        // Extract Token (Handle "Bearer " prefix if present)
+        let token = request.headers.get('X-Session-Token');
+        const authHeader = request.headers.get('Authorization');
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+          token = authHeader.substring(7);
+        }
+        
+        if (!token) return new Response('Authentication required', { status: 401 });
+        
+        // Verify token exists
+        const tokenValid = await env.TOOL_AUTH.get('session:' + token);
+        if (!tokenValid) return new Response('Invalid session token', { status: 401 });
+        
+        return new Response(toolContent, {
+          headers: {
+            'Content-Type': 'text/html',
+            'Cache-Control': 'no-store, private',
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Session-Token'
+          }
+        });
+      } catch (e) {
+        console.error('Tool fetch error:', e);
+        return new Response('Error: ' + e.message, { status: 500 });
+      }
+    }
+    // ── END PROTECTED TOOL ROUTE ────────────────────────────────
 
       // ── GET / — health check ────────────────────────────────────
       if (path === '/' && method === 'GET') {
